@@ -1,25 +1,38 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<Version>1.0.0</Version>
+		<PackageId>RuntimeBundler</PackageId>
+		<Authors>Paul Hutchinson</Authors>
+		<Company>Findon Software</Company>
+		<Description>A zero-config runtime JS/CSS bundler for .NET</Description>
+		<PackageTags>bundler;aspnetcore;javascript;css;less</PackageTags>
+		<RepositoryUrl>https://github.com/hutchpd/RuntimeBundler/</RepositoryUrl>
+		<PackageLicenseExpression>Unlicense</PackageLicenseExpression>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="Less\runtime\less.min.js" />
-    <EmbeddedResource Include="Less\runtime\less.min.node.js" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Include="LICENCE" Pack="true" PackagePath="" />
+		<None Include="README.md" Pack="true" PackagePath="" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
+	<ItemGroup>
+		<EmbeddedResource Include="Less\runtime\less.min.js" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="JavaScriptEngineSwitcher.ChakraCore" Version="3.27.3" />
-    <PackageReference Include="JavaScriptEngineSwitcher.ChakraCore.Native.win-x64" Version="3.27.3" />
-    <PackageReference Include="JavaScriptEngineSwitcher.Jint" Version="3.29.1" />
-    <PackageReference Include="NUglify" Version="1.21.15" />
-  </ItemGroup>
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="JavaScriptEngineSwitcher.ChakraCore" Version="3.27.3" />
+		<PackageReference Include="JavaScriptEngineSwitcher.ChakraCore.Native.win-x64" Version="3.27.3" />
+		<PackageReference Include="NUglify" Version="1.21.15" />
+	</ItemGroup>
 
 </Project>
