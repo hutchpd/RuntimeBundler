@@ -1,0 +1,22 @@
+{
+  "Bundles": {
+    "cog": {
+      "UrlPath": "/scripts/cog.js",
+      "CacheDuration": "00:05:00",
+      "SourceFiles": [
+        "Scripts/popper.min.js",
+        "Scripts/bootstrap.js",
+        "Scripts/utils.js",
+        "Scripts/app.js"
+      ]
+    },
+    "admin": {
+      "UrlPath": "/scripts/admin.js",
+      "CacheDuration": "00:05:00",
+      "SourceFiles": [
+        "Scripts/admin/core.js",
+        "Scripts/admin/widgets.js"
+      ]
+    }
+  }
+}

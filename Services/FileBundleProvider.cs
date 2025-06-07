@@ -1,0 +1,180 @@
+﻿// src/Services/FileBundleProvider.cs
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using RuntimeBundler.Models;
+using NUglify.Css;
+using NUglify;
+using NUglify.JavaScript;
+using BundleTransformer.Less;
+using JavaScriptEngineSwitcher.Core;
+using JavaScriptEngineSwitcher.Jint;
+using BundleTransformer.Core.Assets;
+using BundleTransformer.Less.Translators;
+
+namespace RuntimeBundler.Services
+{
+    /// <summary>
+    /// Reads bundle definitions from configuration, concatenates source files
+    /// in the configured order, and caches the output in memory until any
+    /// dependent file changes or the TTL expires.
+    /// </summary>
+    internal sealed class FileBundleProvider : IBundleProvider, IDisposable
+    {
+        private readonly IWebHostEnvironment _env;
+        private readonly BundleConfiguration _config;
+        private readonly IBundleCache _cache;
+        private readonly ILogger<FileBundleProvider> _logger;
+        private readonly FileSystemWatcher _fsWatcher;
+
+        public FileBundleProvider(
+            IWebHostEnvironment env,
+            IOptions<BundleConfiguration> opt,
+            IBundleCache cache,
+            ILogger<FileBundleProvider> logger)
+        {
+            _env = env;
+            _config = opt.Value ?? new BundleConfiguration();
+            _cache = cache;
+            _logger = logger;
+
+            var webRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+
+            // Watch JS, CSS, LESS changes
+            _fsWatcher = new FileSystemWatcher(webRoot)
+            {
+                Filter = "*.*",
+                IncludeSubdirectories = true,
+                EnableRaisingEvents = true
+            };
+            _fsWatcher.Changed += OnSourceFileChanged;
+            _fsWatcher.Deleted += OnSourceFileChanged;
+            _fsWatcher.Renamed += OnSourceFileChanged;
+        }
+
+        private void OnSourceFileChanged(object? sender, FileSystemEventArgs e)
+        {
+            // Compute the relative path key we store in config (e.g. "Scripts/f.js")
+            var webRoot = _env.WebRootPath ?? _env.ContentRootPath;
+            var rel = e.FullPath
+                        .Replace(webRoot, "")
+                        .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                        .Replace('\\', '/');
+
+            // Invalidate any bundle whose SourceFiles list contains that relative path
+            foreach (var kvp in _config.Bundles)
+            {
+                var bundleKey = kvp.Key;
+                var def = kvp.Value;
+
+                if (def.SourceFiles.Any(sf =>
+                    string.Equals(sf.TrimStart('~', '/'), rel, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _cache.Invalidate(bundleKey);
+                }
+            }
+        }
+
+        public async Task<byte[]?> GetBundleAsync(string bundleKey)
+        {
+            if (!_config.Bundles.TryGetValue(bundleKey, out var bundle))
+            {
+                _logger.LogWarning("Bundle key '{Key}' not found", bundleKey);
+                return null;
+            }
+
+            // Check cache
+            if (_cache.TryGet(bundleKey, out var cached))
+                return cached;
+
+            // Concatenate in declared order (compile .less → css on the fly)
+            var sb = new StringBuilder();
+            var isCssBundle = bundle.IsStyleBundle
+                              ?? bundle.UrlPath.EndsWith(".css", StringComparison.OrdinalIgnoreCase);
+
+            foreach (var relative in bundle.SourceFiles)
+            {
+                var full = ResolvePath(relative);
+                if (!File.Exists(full))
+                {
+                    _logger.LogError("Bundle '{Key}': source file '{File}' not found", bundleKey, full);
+                    continue;
+                }
+
+                var ext = Path.GetExtension(full).ToLowerInvariant();
+                if (ext == ".less")
+                {
+                    var lessText = await File.ReadAllTextAsync(full, Encoding.UTF8);
+
+                    // Build a virtual path for BundleTransformer (it must start with '/')
+                    // e.g. "/Scripts/myStyles.less"
+                    var virtualPath = "/" + relative.Replace('\\', '/');
+
+                    // Create the asset and seed it with the LESS text
+                    var asset = new Asset(virtualPath);
+                    asset.Content = lessText;
+
+                    var translator = new LessTranslator();
+                    translator.Translate(asset);
+
+                    sb.AppendLine(asset.Content);
+
+                    // Mark bundle as CSS so later we pick the right minification path
+                    isCssBundle = true;
+                }
+                else
+                {
+                    // plain JS or CSS
+                    sb.AppendLine(await File.ReadAllTextAsync(full));
+                }
+            }
+
+            var content = sb.ToString();
+
+            // Apply minification if configured
+            if (bundle.Minify)
+            {
+                if (isCssBundle)
+                {
+                    var cssMin = Uglify.Css(content, new CssSettings { CommentMode = CssComment.None });
+                    if (!cssMin.HasErrors)
+                        content = cssMin.Code;
+                    else
+                        _logger.LogWarning("CSS minify errors for {Key}", bundleKey);
+                }
+                else
+                {
+                    var jsMin = Uglify.Js(content, new CodeSettings { TermSemicolons = true });
+                    if (!jsMin.HasErrors)
+                        content = jsMin.Code;
+                    else
+                        _logger.LogWarning("JS minify errors for {Key}", bundleKey);
+                }
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(content);
+
+            // Store in cache with TTL
+            var ttl = bundle.CacheDuration == default
+                      ? TimeSpan.FromMinutes(5)
+                      : bundle.CacheDuration;
+
+            _cache.Set(bundleKey, bytes, ttl);
+            return bytes;
+        }
+
+        private string ResolvePath(string relativePath)
+        {
+            // Treat paths starting with "~/" or leading slash as web-rooted
+            var trimmed = relativePath.TrimStart('~', '/').Replace('\\', '/');
+            return Path.Combine(_env.WebRootPath ?? string.Empty, trimmed);
+        }
+
+        public void Dispose() => _fsWatcher?.Dispose();
+    }
+}

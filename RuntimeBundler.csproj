@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BundleTransformer.Less" Version="1.14.0" />
+    <PackageReference Include="JavaScriptEngineSwitcher.Jint" Version="3.29.1" />
+    <PackageReference Include="NUglify" Version="1.21.15" />
+  </ItemGroup>
+
+</Project>
