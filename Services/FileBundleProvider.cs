@@ -11,11 +11,10 @@ using RuntimeBundler.Models;
 using NUglify.Css;
 using NUglify;
 using NUglify.JavaScript;
-using BundleTransformer.Less;
 using JavaScriptEngineSwitcher.Core;
-using JavaScriptEngineSwitcher.Jint;
-using BundleTransformer.Core.Assets;
-using BundleTransformer.Less.Translators;
+using JavaScriptEngineSwitcher.ChakraCore;
+using RuntimeBundler.Less;
+using System.Collections.Concurrent;
 
 namespace RuntimeBundler.Services
 {
@@ -31,6 +30,7 @@ namespace RuntimeBundler.Services
         private readonly IBundleCache _cache;
         private readonly ILogger<FileBundleProvider> _logger;
         private readonly FileSystemWatcher _fsWatcher;
+        private readonly ConcurrentDictionary<string, Lazy<Task<byte[]?>>> _bundleTasks = new();
 
         public FileBundleProvider(
             IWebHostEnvironment env,
@@ -76,11 +76,26 @@ namespace RuntimeBundler.Services
                     string.Equals(sf.TrimStart('~', '/'), rel, StringComparison.OrdinalIgnoreCase)))
                 {
                     _cache.Invalidate(bundleKey);
+                    // Remove any pending build
+                    _bundleTasks.TryRemove(bundleKey, out _);
                 }
             }
         }
 
-        public async Task<byte[]?> GetBundleAsync(string bundleKey)
+        public Task<byte[]?> GetBundleAsync(string bundleKey)
+        {
+            // If the cache is empty, evict any stale Lazy so we rebuild
+            if (!_cache.TryGet(bundleKey, out _))
+            {
+                _bundleTasks.TryRemove(bundleKey, out _);
+            }
+
+            var lazy = _bundleTasks.GetOrAdd(bundleKey,
+                _ => new Lazy<Task<byte[]?>>(() => ComputeAndCacheBundleAsync(bundleKey)));
+            return lazy.Value;
+        }
+
+        private async Task<byte[]?> ComputeAndCacheBundleAsync(string bundleKey)
         {
             if (!_config.Bundles.TryGetValue(bundleKey, out var bundle))
             {
@@ -88,7 +103,7 @@ namespace RuntimeBundler.Services
                 return null;
             }
 
-            // Check cache
+            // First check cache
             if (_cache.TryGet(bundleKey, out var cached))
                 return cached;
 
@@ -111,20 +126,17 @@ namespace RuntimeBundler.Services
                 {
                     var lessText = await File.ReadAllTextAsync(full, Encoding.UTF8);
 
-                    // Build a virtual path for BundleTransformer (it must start with '/')
-                    // e.g. "/Scripts/myStyles.less"
-                    var virtualPath = "/" + relative.Replace('\\', '/');
+                    var compiler = new LessCompiler(
+                        () => JsEngineSwitcher.Current.CreateEngine(ChakraCoreJsEngine.EngineName),
+                        new VirtualFileManager(_env.WebRootPath!),
+                        new CompilationOptions
+                        {
+                            IncludePaths = new[] { Path.GetDirectoryName(full)! },
+                            EnableNativeMinification = false
+                        });
 
-                    // Create the asset and seed it with the LESS text
-                    var asset = new Asset(virtualPath);
-                    asset.Content = lessText;
-
-                    var translator = new LessTranslator();
-                    translator.Translate(asset);
-
-                    sb.AppendLine(asset.Content);
-
-                    // Mark bundle as CSS so later we pick the right minification path
+                    var result = compiler.Compile(lessText, "/" + relative.Replace('\\', '/'));
+                    sb.AppendLine(result.CompiledContent);
                     isCssBundle = true;
                 }
                 else

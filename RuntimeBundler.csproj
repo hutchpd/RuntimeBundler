@@ -7,11 +7,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Less\runtime\less.min.js" />
+    <EmbeddedResource Include="Less\runtime\less.min.node.js" />
+  </ItemGroup>
+
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BundleTransformer.Less" Version="1.14.0" />
+    <PackageReference Include="JavaScriptEngineSwitcher.ChakraCore" Version="3.27.3" />
+    <PackageReference Include="JavaScriptEngineSwitcher.ChakraCore.Native.win-x64" Version="3.27.3" />
     <PackageReference Include="JavaScriptEngineSwitcher.Jint" Version="3.29.1" />
     <PackageReference Include="NUglify" Version="1.21.15" />
   </ItemGroup>
