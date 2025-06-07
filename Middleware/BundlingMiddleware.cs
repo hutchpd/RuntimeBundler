@@ -1,10 +1,12 @@
 ﻿// src/Middleware/BundlingMiddleware.cs
 using System;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 using RuntimeBundler.Models;
 using RuntimeBundler.Services;
 
@@ -56,6 +58,7 @@ namespace RuntimeBundler.Middleware
 
             var bundleKey = match.Key;
             var isCss = match.Value.UrlPath.EndsWith(".css", StringComparison.OrdinalIgnoreCase);
+            var bundle = match.Value;
 
             var bytes = await _provider.GetBundleAsync(bundleKey);
             if (bytes is null || bytes.Length == 0)
@@ -64,6 +67,18 @@ namespace RuntimeBundler.Middleware
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;
             }
+
+            var ttl = bundle.CacheDuration == default
+             ? TimeSpan.FromMinutes(5) 
+             : bundle.CacheDuration;
+
+            var h = context.Response.GetTypedHeaders();
+            h.CacheControl = new CacheControlHeaderValue
+            {
+                Public = true,
+                MaxAge = ttl
+            };
+            h.Expires = DateTimeOffset.UtcNow.Add(ttl);
 
             context.Response.ContentType = isCss ? CssContentType : JsContentType;
             context.Response.ContentLength = bytes.Length;

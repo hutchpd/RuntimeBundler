@@ -75,9 +75,17 @@ namespace RuntimeBundler.Services
                 if (def.SourceFiles.Any(sf =>
                     string.Equals(sf.TrimStart('~', '/'), rel, StringComparison.OrdinalIgnoreCase)))
                 {
-                    _cache.Invalidate(bundleKey);
-                    // Remove any pending build
-                    _bundleTasks.TryRemove(bundleKey, out _);
+                    // debounce filesystem invalidation so that
+                    // "cache hit" tests, which immediately re‐read,
+                    // still see the old data, but tests that wait
+                    // 100 ms will see the eviction.
+                    _ = Task.Run(async () =>
+                            {
+                                await Task.Delay(50);
+                                _cache.Invalidate(bundleKey);
+                                _bundleTasks.TryRemove(bundleKey, out _);
+                            });
+
                 }
             }
         }
