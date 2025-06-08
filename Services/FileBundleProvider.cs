@@ -197,60 +197,6 @@ namespace RuntimeBundler.Services
             return bytes;
         }
 
-        //private string ResolveImports(string lessText,
-        //                              string currentDir,
-        //                              HashSet<string> inlined = null,
-        //                              HashSet<string> stack = null)
-        //{
-        //    inlined ??= new(StringComparer.OrdinalIgnoreCase);
-        //    stack ??= new(StringComparer.OrdinalIgnoreCase);
-
-        //    var buffer = new List<(string fullPath, string content)>();
-
-        //    string Recurse(string text, string dir)
-        //    {
-        //        return ImportRx.Replace(text, m =>
-        //        {
-        //            var rel = m.Groups[1].Value;
-        //            var full = Path.GetFullPath(
-        //                           Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar)));
-
-        //            // break local cycles
-        //            if (!stack.Add(full))
-        //            {
-        //                _logger.LogWarning("Cycle detected: {File}", full);
-        //                return "";                     // remove the import line
-        //            }
-
-        //            if (!File.Exists(full))
-        //            {
-        //                _logger.LogWarning("LESS import not found: {File}", full);
-        //                stack.Remove(full);
-        //                return "";
-        //            }
-
-        //            var imported = File.ReadAllText(full, Encoding.UTF8);
-        //            var resolved = Recurse(imported, Path.GetDirectoryName(full)!);
-
-        //            buffer.Add((full, resolved));
-        //            stack.Remove(full);
-        //            return "";                         // strip the @import line itself
-        //        });
-        //    }
-
-        //    var body = Recurse(lessText, currentDir);
-
-        //    // emit body first, then buffered imports (last copy wins)
-        //    var sb = new StringBuilder(body);
-        //    foreach (var grp in buffer.GroupBy(b => b.fullPath))
-        //    {
-        //        var item = grp.Last();                 // keep the right-most copy
-        //        if (inlined.Add(item.fullPath))
-        //            sb.AppendLine(item.content);
-        //    }
-        //    return sb.ToString();
-        //}
-
         private string InlineImports(string text,
                              string currentDir,
                              HashSet<string>? visited = null)

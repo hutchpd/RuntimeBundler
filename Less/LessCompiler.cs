@@ -32,7 +32,6 @@ namespace RuntimeBundler.Less
             _fs = fileSystem;
             _opts = options;
 
-            // 1) Set up the minimal DOM / module shims
             _engine.Execute(@"
                 var global = this;
                 var window = global;
@@ -48,7 +47,6 @@ namespace RuntimeBundler.Less
                 var exports = module.exports;
             ");
 
-            // 2) Load Less.js (browser build)
             var asm = typeof(LessCompiler).Assembly;
             using var stream = asm.GetManifestResourceStream("RuntimeBundler.Less.runtime.less.min.js")
                              ?? throw new InvalidOperationException("Embedded less.min.js not found");
@@ -56,7 +54,6 @@ namespace RuntimeBundler.Less
             var lessJs = reader.ReadToEnd();
             _engine.Execute(lessJs);
 
-            // 3) Expose the library as a global
             _engine.Execute("var less = module.exports;");
 
             _engine.Execute(@"
@@ -105,10 +102,6 @@ namespace RuntimeBundler.Less
                 var navigator = {};
                 var location  = { href: '/' };
             ");
-
-            // Load the embedded less.min.js text (assumed already loaded in constructor)
-            // If not loaded, uncomment the following:
-            // _engine.Execute(lessJs);
 
             // Build .NET options object
             var opts = new
