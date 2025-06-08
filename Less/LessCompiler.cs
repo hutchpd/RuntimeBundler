@@ -81,12 +81,7 @@ namespace RuntimeBundler.Less
 })(less.functions.functionRegistry, less.tree);
 ");
 
-
-
         }
-
-
-
 
         /// <summary>
         /// Compile a LESS string into CSS.
