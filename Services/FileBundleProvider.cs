@@ -15,6 +15,7 @@ using JavaScriptEngineSwitcher.Core;
 using JavaScriptEngineSwitcher.ChakraCore;
 using RuntimeBundler.Less;
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 
 namespace RuntimeBundler.Services
 {
@@ -31,6 +32,10 @@ namespace RuntimeBundler.Services
         private readonly ILogger<FileBundleProvider> _logger;
         private readonly FileSystemWatcher _fsWatcher;
         private readonly ConcurrentDictionary<string, Lazy<Task<byte[]?>>> _bundleTasks = new();
+
+        private static readonly Regex ImportRx =
+    new(@"@import\s+(?:\([^\)]+\)\s*)?(?:url\()?['""]([^'"")]+)['""]\)?\s*;",
+        RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
 
         public FileBundleProvider(
             IWebHostEnvironment env,
@@ -133,6 +138,7 @@ namespace RuntimeBundler.Services
                 if (ext == ".less")
                 {
                     var lessText = await File.ReadAllTextAsync(full, Encoding.UTF8);
+                    lessText = ResolveImports(lessText, Path.GetDirectoryName(full)!);
 
                     var compiler = new LessCompiler(
                         () => JsEngineSwitcher.Current.CreateEngine(ChakraCoreJsEngine.EngineName),
@@ -187,6 +193,26 @@ namespace RuntimeBundler.Services
             _cache.Set(bundleKey, bytes, ttl);
             return bytes;
         }
+
+        private string ResolveImports(string lessText, string currentDir)
+        {
+            return ImportRx.Replace(lessText, m =>
+            {
+                var rel = m.Groups[1].Value;
+                var full = Path.GetFullPath(
+                               Path.Combine(currentDir, rel.Replace('/', Path.DirectorySeparatorChar)));
+
+                if (!File.Exists(full))
+                {
+                    _logger.LogWarning("LESS import not found: {File}", full);
+                    return ""; // or re-emit the original line
+                }
+
+                var imported = File.ReadAllText(full, Encoding.UTF8);
+                return ResolveImports(imported, Path.GetDirectoryName(full)!);  // recurse
+            });
+        }
+
 
         private string ResolvePath(string relativePath)
         {

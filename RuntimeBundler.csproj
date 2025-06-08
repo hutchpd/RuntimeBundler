@@ -4,7 +4,7 @@
 		<TargetFramework>net9.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>1.0.0</Version>
+		<Version>1.0.1</Version>
 		<PackageId>RuntimeBundler</PackageId>
 		<Authors>Paul Hutchinson</Authors>
 		<Company>Findon Software</Company>

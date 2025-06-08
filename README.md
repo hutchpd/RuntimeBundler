@@ -299,7 +299,6 @@ app.UseRuntimeBundler();      // after static files
 | `Minify`        | Runs NUglify (CSS/JS) after concatenation. Leave `false` in development if you prefer.   |
 | `IsStyleBundle` | Force CSS processing even if `UrlPath` doesn’t end with `.css` (rare but supported).     |
 | Setting         | Effect                                                                                   |
-| --------------- | ---------------------------------------------------------------------------------------- |
 | Single-Build    | Guarantees only one build operation per bundle key, even under concurrent requests.      |
 
 
