@@ -138,7 +138,7 @@ namespace RuntimeBundler.Services
                 if (ext == ".less")
                 {
                     var lessText = await File.ReadAllTextAsync(full, Encoding.UTF8);
-                    lessText = ResolveImports(lessText, Path.GetDirectoryName(full)!);
+                    lessText = InlineImports(lessText, Path.GetDirectoryName(full)!);
 
                     var compiler = new LessCompiler(
                         () => JsEngineSwitcher.Current.CreateEngine(ChakraCoreJsEngine.EngineName),
@@ -146,6 +146,9 @@ namespace RuntimeBundler.Services
                         new CompilationOptions
                         {
                             IncludePaths = new[] { Path.GetDirectoryName(full)! },
+                            Math = MathMode.Loose,
+                            StrictUnits = false,
+                            JavascriptEnabled = true,
                             EnableNativeMinification = false
                         });
 
@@ -194,25 +197,87 @@ namespace RuntimeBundler.Services
             return bytes;
         }
 
-        private string ResolveImports(string lessText, string currentDir)
+        //private string ResolveImports(string lessText,
+        //                              string currentDir,
+        //                              HashSet<string> inlined = null,
+        //                              HashSet<string> stack = null)
+        //{
+        //    inlined ??= new(StringComparer.OrdinalIgnoreCase);
+        //    stack ??= new(StringComparer.OrdinalIgnoreCase);
+
+        //    var buffer = new List<(string fullPath, string content)>();
+
+        //    string Recurse(string text, string dir)
+        //    {
+        //        return ImportRx.Replace(text, m =>
+        //        {
+        //            var rel = m.Groups[1].Value;
+        //            var full = Path.GetFullPath(
+        //                           Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar)));
+
+        //            // break local cycles
+        //            if (!stack.Add(full))
+        //            {
+        //                _logger.LogWarning("Cycle detected: {File}", full);
+        //                return "";                     // remove the import line
+        //            }
+
+        //            if (!File.Exists(full))
+        //            {
+        //                _logger.LogWarning("LESS import not found: {File}", full);
+        //                stack.Remove(full);
+        //                return "";
+        //            }
+
+        //            var imported = File.ReadAllText(full, Encoding.UTF8);
+        //            var resolved = Recurse(imported, Path.GetDirectoryName(full)!);
+
+        //            buffer.Add((full, resolved));
+        //            stack.Remove(full);
+        //            return "";                         // strip the @import line itself
+        //        });
+        //    }
+
+        //    var body = Recurse(lessText, currentDir);
+
+        //    // emit body first, then buffered imports (last copy wins)
+        //    var sb = new StringBuilder(body);
+        //    foreach (var grp in buffer.GroupBy(b => b.fullPath))
+        //    {
+        //        var item = grp.Last();                 // keep the right-most copy
+        //        if (inlined.Add(item.fullPath))
+        //            sb.AppendLine(item.content);
+        //    }
+        //    return sb.ToString();
+        //}
+
+        private string InlineImports(string text,
+                             string currentDir,
+                             HashSet<string>? visited = null)
         {
-            return ImportRx.Replace(lessText, m =>
+            visited ??= new(StringComparer.OrdinalIgnoreCase);
+
+            return ImportRx.Replace(text, m =>
             {
                 var rel = m.Groups[1].Value;
                 var full = Path.GetFullPath(
-                               Path.Combine(currentDir, rel.Replace('/', Path.DirectorySeparatorChar)));
+                               Path.Combine(currentDir,
+                                            rel.Replace('/', Path.DirectorySeparatorChar)));
+
+                // Already processed?  Skip.
+                if (!visited.Add(full))
+                    return string.Empty;
 
                 if (!File.Exists(full))
                 {
-                    _logger.LogWarning("LESS import not found: {File}", full);
-                    return ""; // or re-emit the original line
+                    _logger.LogWarning("Missing @import file: {File}", full);
+                    return string.Empty;
                 }
 
                 var imported = File.ReadAllText(full, Encoding.UTF8);
-                return ResolveImports(imported, Path.GetDirectoryName(full)!);  // recurse
+                return InlineImports(imported, Path.GetDirectoryName(full)!, visited);
             });
         }
-
 
         private string ResolvePath(string relativePath)
         {

@@ -32,40 +32,62 @@ namespace RuntimeBundler.Less
             _fs = fileSystem;
             _opts = options;
 
+            // 1) Set up the minimal DOM / module shims
             _engine.Execute(@"
                 var global = this;
                 var window = global;
-
                 var document = {
-                    createElement: function () { return { style:{}, firstChild:null,
-                                                          removeChild:function(){}, appendChild:function(){} }; },
-
+                    createElement: function () { return { style:{}, firstChild:null, removeChild:function(){}, appendChild:function(){} }; },
                     createTextNode: function () { return {}; },
-
                     getElementsByTagName: function () { return []; },
-
                     head: { appendChild: function(){} }
                 };
-
                 var navigator = {};
                 var location  = { href:'/' };
-
-                var module  = { exports:{} };
+                var module  = { exports: {} };
                 var exports = module.exports;
             ");
 
-
-
+            // 2) Load Less.js (browser build)
             var asm = typeof(LessCompiler).Assembly;
-            using var stream = asm.GetManifestResourceStream(
-                "RuntimeBundler.Less.runtime.less.min.js"
-            ) ?? throw new InvalidOperationException("Embedded less.min.js not found");
+            using var stream = asm.GetManifestResourceStream("RuntimeBundler.Less.runtime.less.min.js")
+                             ?? throw new InvalidOperationException("Embedded less.min.js not found");
             using var reader = new StreamReader(stream);
             var lessJs = reader.ReadToEnd();
             _engine.Execute(lessJs);
 
+            // 3) Expose the library as a global
             _engine.Execute("var less = module.exports;");
+
+            _engine.Execute(@"
+(function(fr, tree){
+  // helpers we want to guard
+  var names = ['ceil','floor','round','sqrt','pow','abs','min','max'];
+
+  function asDim(n){
+    var u = (n && n.unit) ? n.unit.clone() : new tree.Unit([]);
+    return new tree.Dimension(0, u);
+  }
+
+  names.forEach(function(name){
+    var orig = fr.get(name);
+    if (!orig) return;                 // skip if Less drops one later
+    fr.add(
+      name,
+      function(n,a){                 // keep extra arg for pow, min, max…
+        try { return orig.apply(this, arguments); }
+        catch(_) { return asDim(n); }   // fall back to 0<unit>
+      },
+      /* overwrite = */ true
+    );
+  });
+})(less.functions.functionRegistry, less.tree);
+");
+
+
+
         }
+
 
 
 
@@ -111,13 +133,17 @@ namespace RuntimeBundler.Less
 
             // Call less.render synchronously via a shim to capture CSS output
             var compileScript = @"
-                var __outCss = '';
-                less.render(LESS_CODE, LESS_OPTS, function(err, output) {
-                  if (err) throw err;
-                  __outCss = output.css;
-                });
-                __outCss;
+              var __css = '';
+              var __err = null;
+
+              less.render(LESS_CODE, LESS_OPTS)
+                  .then(function (out) { __css = out.css; })
+                  .catch(function (e)  { __err = JSON.stringify(e); });
+
+              if (__err) { throw new Error(__err); }
+              __css;
             ";
+                
             var css = _engine.Evaluate<string>(compileScript);
 
             // Return the result (no imported files tracked here)
